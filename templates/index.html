@@ -1,0 +1,1287 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>C盘深度清理工具</title>
+    <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+    <style>
+        :root {
+            --bg: #0f1419;
+            --surface: #1a1f2e;
+            --surface2: #222838;
+            --border: #2a3040;
+            --text: #e0e0e0;
+            --text2: #9099aa;
+            --safe: #27ae60;
+            --caution: #f39c12;
+            --danger: #e74c3c;
+            --accent: #3498db;
+            --large: #9b59b6;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* 顶部导航 */
+        .navbar {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+        }
+        .navbar .logo {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--accent);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .navbar .logo .icon { font-size: 28px; }
+        .navbar .actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        /* 按钮 */
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+        }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+        }
+        .btn-primary:hover:not(:disabled) { background: #2980b9; }
+        .btn-safe {
+            background: var(--safe);
+            color: white;
+        }
+        .btn-safe:hover:not(:disabled) { background: #219a52; }
+        .btn-caution {
+            background: var(--caution);
+            color: #1a1a1a;
+        }
+        .btn-caution:hover:not(:disabled) { background: #d68910; }
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text);
+        }
+        .btn-outline:hover:not(:disabled) { background: var(--surface2); }
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+        .btn-lg {
+            padding: 14px 28px;
+            font-size: 16px;
+            border-radius: 12px;
+        }
+
+        /* 主布局 */
+        .container {
+            max-width: 1500px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* 统计卡片 */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            transition: transform 0.2s;
+        }
+        .stat-card:hover { transform: translateY(-2px); }
+        .stat-card .label {
+            font-size: 13px;
+            color: var(--text2);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .stat-card .value {
+            font-size: 28px;
+            font-weight: 700;
+        }
+        .stat-card .sub {
+            font-size: 12px;
+            color: var(--text2);
+            margin-top: 4px;
+        }
+        .stat-card.safe { border-left: 3px solid var(--safe); }
+        .stat-card.safe .value { color: var(--safe); }
+        .stat-card.caution { border-left: 3px solid var(--caution); }
+        .stat-card.caution .value { color: var(--caution); }
+        .stat-card.large { border-left: 3px solid var(--large); }
+        .stat-card.large .value { color: var(--large); }
+        .stat-card.info { border-left: 3px solid var(--accent); }
+        .stat-card.info .value { color: var(--accent); }
+
+        /* 双栏布局 */
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        @media (max-width: 1000px) {
+            .two-col { grid-template-columns: 1fr; }
+        }
+
+        /* 面板 */
+        .panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .panel-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            font-weight: 600;
+            font-size: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .panel-body {
+            padding: 16px 20px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .panel-body.tall {
+            max-height: 700px;
+        }
+
+        /* 进度条 */
+        .progress-bar-wrap {
+            background: var(--surface2);
+            border-radius: 10px;
+            height: 8px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), var(--safe));
+            border-radius: 10px;
+            transition: width 0.5s ease;
+        }
+        .progress-text {
+            font-size: 13px;
+            color: var(--text2);
+            text-align: center;
+        }
+
+        /* 文件列表 */
+        .file-list-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 12px;
+            border-radius: 8px;
+            margin-bottom: 4px;
+            cursor: pointer;
+            transition: background 0.15s;
+            gap: 10px;
+        }
+        .file-list-item:hover {
+            background: var(--surface2);
+        }
+        .file-list-item.selected {
+            background: rgba(52, 152, 219, 0.15);
+            border: 1px solid rgba(52, 152, 219, 0.3);
+        }
+        .file-list-item .file-icon {
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+        .file-list-item .file-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .file-list-item .file-name {
+            font-size: 13px;
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .file-list-item .file-path {
+            font-size: 11px;
+            color: var(--text2);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .file-list-item .file-size {
+            font-size: 13px;
+            font-weight: 600;
+            flex-shrink: 0;
+            min-width: 70px;
+            text-align: right;
+        }
+        .file-list-item .file-category {
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            flex-shrink: 0;
+            font-weight: 600;
+        }
+        .cat-safe { background: rgba(39,174,96,0.2); color: var(--safe); }
+        .cat-caution { background: rgba(243,156,18,0.2); color: var(--caution); }
+        .cat-large { background: rgba(155,89,182,0.2); color: var(--large); }
+
+        /* 复选框 */
+        .checkbox-wrap {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .checkbox-wrap input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--accent);
+        }
+
+        /* 模态框 */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 999;
+            backdrop-filter: blur(4px);
+        }
+        .modal {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 0;
+            max-width: 700px;
+            width: 90%;
+            max-height: 80vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border);
+            font-size: 18px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .modal-body {
+            padding: 20px 24px;
+            overflow-y: auto;
+            flex: 1;
+        }
+        .modal-footer {
+            padding: 16px 24px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+        .close-btn {
+            background: none;
+            border: none;
+            color: var(--text2);
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0 4px;
+            line-height: 1;
+        }
+        .close-btn:hover { color: var(--text); }
+
+        /* 警告列表 */
+        .warning-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 13px;
+        }
+        .warning-item .warn-icon { font-size: 18px; flex-shrink: 0; }
+        .warning-item:last-child { border-bottom: none; }
+
+        /* 标签页 */
+        .tabs {
+            display: flex;
+            gap: 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .tab-btn {
+            padding: 10px 20px;
+            background: none;
+            border: none;
+            color: var(--text2);
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        .tab-btn.active {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+        }
+        .tab-btn:hover { color: var(--text); }
+
+        /* 滚动条 */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #4a5568; }
+
+        /* 空状态 */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text2);
+        }
+        .empty-state .icon { font-size: 64px; margin-bottom: 16px; }
+        .empty-state .text { font-size: 15px; }
+
+        /* 加载动画 */
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* 提示信息 */
+        .info-banner {
+            background: rgba(52,152,219,0.1);
+            border: 1px solid rgba(52,152,219,0.3);
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-size: 13px;
+            color: var(--accent);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .warning-banner {
+            background: rgba(243,156,18,0.1);
+            border: 1px solid rgba(243,156,18,0.3);
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-size: 13px;
+            color: var(--caution);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* 全景面板 */
+        .full-width-panel {
+            margin-bottom: 20px;
+        }
+
+        /* 操作按钮区 */
+        .action-bar {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+
+        /* 状态指示器 */
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .status-dot.green { background: var(--safe); }
+        .status-dot.yellow { background: var(--caution); }
+        .status-dot.blue { background: var(--accent); }
+        .status-dot.pulse {
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- 顶部导航 -->
+<nav class="navbar">
+    <div class="logo">
+        <span class="icon">🧹</span>
+        <span>C盘深度清理工具</span>
+    </div>
+    <div class="actions">
+        <span id="statusIndicator" style="font-size:13px;color:var(--text2);display:flex;align-items:center;gap:6px;">
+            <span class="status-dot blue"></span> 就绪
+        </span>
+    </div>
+</nav>
+
+<div class="container">
+
+    <!-- 操作按钮区 -->
+    <div class="action-bar">
+        <button class="btn btn-primary btn-lg" onclick="startScan()" id="btnScan">
+            🔍 开始扫描C盘
+        </button>
+        <button class="btn btn-outline" onclick="cancelScan()" id="btnCancel" style="display:none;">
+            ⏹ 取消扫描
+        </button>
+        <button class="btn btn-safe btn-lg" onclick="quickClean()" id="btnQuickClean" disabled>
+            ⚡ 一键清理
+        </button>
+        <button class="btn btn-caution btn-lg" onclick="deepClean()" id="btnDeepClean" disabled>
+            🔥 一键深度清理
+        </button>
+    </div>
+
+    <!-- 进度条 (扫描时显示) -->
+    <div id="progressSection" style="display:none; margin-bottom:20px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <span style="font-weight:600;">⏳ 正在扫描C盘...</span>
+            <span id="progressPercent" style="color:var(--accent);">0%</span>
+        </div>
+        <div class="progress-bar-wrap">
+            <div class="progress-bar-fill" id="progressBar" style="width:0%;"></div>
+        </div>
+        <div class="progress-text" id="progressText">正在分析文件系统...</div>
+    </div>
+
+    <!-- 统计卡片 -->
+    <div class="stats-grid" id="statsGrid">
+        <div class="stat-card info">
+            <div class="label">💾 可清理空间</div>
+            <div class="value" id="statCleanable">--</div>
+            <div class="sub">安全清理 + 谨慎清理</div>
+        </div>
+        <div class="stat-card safe">
+            <div class="label">🟢 安全清理</div>
+            <div class="value" id="statSafe">--</div>
+            <div class="sub" id="statSafeCount">0 项</div>
+        </div>
+        <div class="stat-card caution">
+            <div class="label">🟡 谨慎清理</div>
+            <div class="value" id="statCaution">--</div>
+            <div class="sub" id="statCautionCount">0 项</div>
+        </div>
+        <div class="stat-card large">
+            <div class="label">🟣 大文件 (&gt;100MB)</div>
+            <div class="value" id="statLarge">--</div>
+            <div class="sub" id="statLargeCount">0 项</div>
+        </div>
+    </div>
+
+    <!-- 树状图 -->
+    <div class="panel full-width-panel">
+        <div class="panel-header">
+            📊 磁盘空间可视化 (树状图)
+            <span style="font-size:12px;color:var(--text2);">色块面积 = 文件/文件夹大小</span>
+        </div>
+        <div class="panel-body" style="padding:10px;">
+            <div id="treemapChart" style="width:100%;height:500px;">
+                <div class="empty-state">
+                    <div class="icon">📂</div>
+                    <div class="text">点击"开始扫描C盘"查看磁盘空间分布</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 双栏：文件列表 -->
+    <div class="two-col">
+        <!-- 可安全清理 -->
+        <div class="panel">
+            <div class="panel-header">
+                🟢 可安全清理的文件
+                <span style="font-size:12px;color:var(--text2);" id="safeFileCount">-</span>
+            </div>
+            <div class="panel-body" id="safeFileList">
+                <div class="empty-state">
+                    <div class="icon">📭</div>
+                    <div class="text">扫描后显示可安全清理的文件</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 谨慎清理 -->
+        <div class="panel">
+            <div class="panel-header">
+                🟡 谨慎清理 (可能影响用户使用)
+                <span style="font-size:12px;color:var(--text2);" id="cautionFileCount">-</span>
+            </div>
+            <div class="panel-body" id="cautionFileList">
+                <div class="empty-state">
+                    <div class="icon">📭</div>
+                    <div class="text">扫描后显示需要确认的文件</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- 确认清理模态框 -->
+<div class="modal-overlay" id="confirmModal" style="display:none;">
+    <div class="modal">
+        <div class="modal-header">
+            <span id="modalTitle">确认清理</span>
+            <button class="close-btn" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="modal-body" id="modalBody">
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeModal()">取消</button>
+            <button class="btn btn-safe" id="modalConfirmBtn" onclick="confirmClean()">
+                确认清理
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- 结果模态框 -->
+<div class="modal-overlay" id="resultModal" style="display:none;">
+    <div class="modal">
+        <div class="modal-header">
+            ✅ 清理完成
+            <button class="close-btn" onclick="closeResultModal()">&times;</button>
+        </div>
+        <div class="modal-body" id="resultBody">
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-primary" onclick="closeResultModal(); startScan();">
+                🔄 重新扫描
+            </button>
+            <button class="btn btn-outline" onclick="closeResultModal()">关闭</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// ============================================================
+// 全局状态
+// ============================================================
+let scanData = null;
+let pendingCleanType = null;  // 'quick' | 'deep'
+let pendingCleanData = null;
+let selectedFiles = new Set();
+let scanInterval = null;
+
+// ============================================================
+// 扫描操作
+// ============================================================
+async function startScan() {
+    document.getElementById('btnScan').disabled = true;
+    document.getElementById('btnScan').innerHTML = '<span class="spinner"></span> 扫描中...';
+    document.getElementById('btnCancel').style.display = 'flex';
+    document.getElementById('progressSection').style.display = 'block';
+    document.getElementById('progressBar').style.width = '0%';
+    document.getElementById('progressPercent').textContent = '0%';
+    document.getElementById('progressText').textContent = '正在分析C盘文件系统...';
+    document.getElementById('btnQuickClean').disabled = true;
+    document.getElementById('btnDeepClean').disabled = true;
+
+    updateStatus('scanning', '🔍 正在扫描C盘...');
+
+    try {
+        const resp = await fetch('/api/scan/start', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({paths: ['C:\\']})
+        });
+        const data = await resp.json();
+
+        if (data.status === 'started') {
+            // 轮询扫描进度
+            scanInterval = setInterval(pollScanStatus, 500);
+        } else if (data.status === 'error') {
+            alert('扫描启动失败: ' + data.message);
+            resetScanUI();
+        }
+    } catch (err) {
+        alert('无法连接到服务器: ' + err.message);
+        resetScanUI();
+    }
+}
+
+function cancelScan() {
+    fetch('/api/scan/cancel', {method: 'POST'});
+    if (scanInterval) {
+        clearInterval(scanInterval);
+        scanInterval = null;
+    }
+    resetScanUI();
+    updateStatus('ready', '扫描已取消');
+}
+
+async function pollScanStatus() {
+    try {
+        const resp = await fetch('/api/scan/status');
+        const data = await resp.json();
+
+        // 更新进度条
+        if (data.progress !== undefined) {
+            document.getElementById('progressBar').style.width = data.progress + '%';
+            document.getElementById('progressPercent').textContent = data.progress + '%';
+
+            if (data.progress < 30) {
+                document.getElementById('progressText').textContent = '正在扫描C盘目录结构...';
+            } else if (data.progress < 60) {
+                document.getElementById('progressText').textContent = '正在分析用户文件夹...';
+            } else if (data.progress < 90) {
+                document.getElementById('progressText').textContent = '正在分类和排序文件...';
+            } else {
+                document.getElementById('progressText').textContent = '即将完成...';
+            }
+        }
+
+        // 检查是否完成
+        if (data.status === 'completed') {
+            clearInterval(scanInterval);
+            scanInterval = null;
+            scanData = data;
+            onScanComplete(data);
+        } else if (data.status === 'not_scanned') {
+            // 还未开始
+        }
+    } catch (err) {
+        console.error('轮询失败:', err);
+    }
+}
+
+function onScanComplete(data) {
+    updateStatus('ready', '✅ 扫描完成');
+
+    document.getElementById('btnScan').disabled = false;
+    document.getElementById('btnScan').innerHTML = '🔄 重新扫描';
+    document.getElementById('btnCancel').style.display = 'none';
+    document.getElementById('progressSection').style.display = 'none';
+    document.getElementById('btnQuickClean').disabled = false;
+    document.getElementById('btnDeepClean').disabled = false;
+
+    // 更新统计卡片
+    const summary = data.summary || {};
+    document.getElementById('statCleanable').textContent = summary.total_cleanable_formatted || '0 B';
+    document.getElementById('statSafe').textContent = summary.safe_size_formatted || '0 B';
+    document.getElementById('statSafeCount').textContent = (summary.safe_count || 0) + ' 项';
+    document.getElementById('statCaution').textContent = summary.caution_size_formatted || '0 B';
+    document.getElementById('statCautionCount').textContent = (summary.caution_count || 0) + ' 项';
+    document.getElementById('statLarge').textContent = summary.large_size_formatted || '0 B';
+    document.getElementById('statLargeCount').textContent = (summary.large_count || 0) + ' 项';
+
+    // 渲染文件列表
+    renderFileList('safeFileList', data.safe_files || [], 'safe');
+    renderFileList('cautionFileList', data.caution_files || [], 'caution');
+    document.getElementById('safeFileCount').textContent = (data.safe_files || []).length + ' 项';
+    document.getElementById('cautionFileCount').textContent = (data.caution_files || []).length + ' 项';
+
+    // 渲染树状图
+    renderTreemap(data);
+
+    // 滚动到顶部
+    window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+function resetScanUI() {
+    document.getElementById('btnScan').disabled = false;
+    document.getElementById('btnScan').innerHTML = '🔍 开始扫描C盘';
+    document.getElementById('btnCancel').style.display = 'none';
+    document.getElementById('progressSection').style.display = 'none';
+}
+
+// ============================================================
+// 树状图渲染 (Plotly Treemap)
+// ============================================================
+function renderTreemap(data) {
+    const safeFiles = (data.safe_files || []).filter(f => f.size > 1048576).slice(0, 60);
+    const cautionFiles = (data.caution_files || []).filter(f => f.size > 1048576).slice(0, 40);
+    const largeFiles = (data.large_files || []).filter(f => f.size > 104857600).slice(0, 30);
+
+    const labels = [];
+    const parents = [];
+    const values = [];
+    const colors = [];
+    const hoverTexts = [];
+    const customData = [];
+
+    // 根节点
+    const rootLabels = ['🗑️ C盘可清理空间'];
+    const rootParents = [''];
+
+    // 安全清理分类
+    if (safeFiles.length > 0) {
+        const safeTotal = safeFiles.reduce((s, f) => s + f.size, 0);
+        labels.push('🟢 安全清理');
+        parents.push('🗑️ C盘可清理空间');
+        values.push(safeTotal);
+        colors.push('#27ae60');
+        hoverTexts.push(`安全清理: ${formatSize(safeTotal)}<br>${safeFiles.length} 个文件/文件夹`);
+        customData.push('');
+
+        safeFiles.forEach(f => {
+            labels.push(f.name);
+            parents.push('🟢 安全清理');
+            values.push(f.size);
+            colors.push('rgba(39,174,96,0.7)');
+            hoverTexts.push(`<b>${f.name}</b><br>路径: ${f.path}<br>大小: ${f.size_formatted}<br>类别: 可安全清理`);
+            customData.push(f.path);
+        });
+    }
+
+    // 谨慎清理分类
+    if (cautionFiles.length > 0) {
+        const cautionTotal = cautionFiles.reduce((s, f) => s + f.size, 0);
+        labels.push('🟡 谨慎清理');
+        parents.push('🗑️ C盘可清理空间');
+        values.push(cautionTotal);
+        colors.push('#f39c12');
+        hoverTexts.push(`谨慎清理: ${formatSize(cautionTotal)}<br>${cautionFiles.length} 个文件/文件夹<br>⚠️ 可能影响应用使用体验`);
+        customData.push('');
+
+        cautionFiles.forEach(f => {
+            labels.push(f.name);
+            parents.push('🟡 谨慎清理');
+            values.push(f.size);
+            colors.push('rgba(243,156,18,0.7)');
+            hoverTexts.push(`<b>${f.name}</b><br>路径: ${f.path}<br>大小: ${f.size_formatted}<br>⚠️ 类别: 谨慎清理`);
+            customData.push(f.path);
+        });
+    }
+
+    // 大文件分类
+    if (largeFiles.length > 0) {
+        const largeTotal = largeFiles.reduce((s, f) => s + f.size, 0);
+        labels.push('🟣 大文件');
+        parents.push('🗑️ C盘可清理空间');
+        values.push(largeTotal);
+        colors.push('#9b59b6');
+        hoverTexts.push(`大文件: ${formatSize(largeTotal)}<br>${largeFiles.length} 个文件 (>100MB)`);
+        customData.push('');
+
+        largeFiles.forEach(f => {
+            labels.push(f.name);
+            parents.push('🟣 大文件');
+            values.push(f.size);
+            colors.push('rgba(155,89,182,0.7)');
+            hoverTexts.push(`<b>${f.name}</b><br>路径: ${f.path}<br>大小: ${f.size_formatted}<br>类别: 大文件`);
+            customData.push(f.path);
+        });
+    }
+
+    // 如果没有数据
+    if (labels.length === 0) {
+        document.getElementById('treemapChart').innerHTML = `
+            <div class="empty-state">
+                <div class="icon">📂</div>
+                <div class="text">未发现可清理的文件</div>
+            </div>`;
+        return;
+    }
+
+    const allLabels = [...rootLabels, ...labels];
+    const allParents = [...rootParents, ...parents];
+    const allValues = [Math.max(...values, 1), ...values];
+    const allColors = ['transparent', ...colors];
+    const allHover = ['', ...hoverTexts];
+    const allCustom = ['', ...customData];
+
+    const trace = {
+        type: 'treemap',
+        labels: allLabels,
+        parents: allParents,
+        values: allValues,
+        branchvalues: 'total',
+        textinfo: 'label+value+percent parent',
+        textfont: {
+            size: 13,
+            color: '#e0e0e0',
+        },
+        marker: {
+            colors: allColors,
+            line: {width: 2, color: '#0f1419'},
+        },
+        hovertemplate: '%{hovertext}<extra></extra>',
+        hovertext: allHover,
+        customdata: allCustom,
+        pathbar: {
+            visible: true,
+            side: 'top',
+            thickness: 25,
+            textfont: {size: 12},
+        },
+        maxdepth: 2,
+    };
+
+    const layout = {
+        plot_bgcolor: '#1a1f2e',
+        paper_bgcolor: '#1a1f2e',
+        font: {color: '#e0e0e0'},
+        margin: {t: 10, r: 10, b: 10, l: 10},
+        treemapcolorway: ['#27ae60', '#f39c12', '#9b59b6', '#e74c3c', '#3498db'],
+        uniformtext: {
+            minsize: 10,
+            mode: 'hide'
+        },
+        clickmode: 'event+select',
+        dragmode: false,
+    };
+
+    const config = {
+        responsive: true,
+        displayModeBar: true,
+        modeBarButtonsToRemove: ['lasso2d', 'select2d', 'autoScale2d'],
+        displaylogo: false,
+        toImageButtonOptions: {
+            format: 'png',
+            filename: 'C盘清理分析',
+        },
+    };
+
+    Plotly.newPlot('treemapChart', [trace], layout, config);
+
+    // 点击事件 - 点击文件项显示详情
+    document.getElementById('treemapChart').on('plotly_click', function(eventData) {
+        const pt = eventData.points[0];
+        if (pt.customdata && pt.customdata !== '') {
+            const path = pt.customdata;
+            // 在文件列表中高亮
+            highlightFileInList(path);
+        }
+    });
+}
+
+function highlightFileInList(path) {
+    // 滚动到对应文件
+    const allItems = document.querySelectorAll('.file-list-item');
+    allItems.forEach(item => {
+        if (item.dataset.path === path) {
+            item.scrollIntoView({behavior: 'smooth', block: 'center'});
+            item.classList.add('selected');
+            setTimeout(() => item.classList.remove('selected'), 3000);
+        }
+    });
+}
+
+// ============================================================
+// 文件列表渲染
+// ============================================================
+function renderFileList(containerId, files, category) {
+    const container = document.getElementById(containerId);
+
+    if (!files || files.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="icon">📭</div>
+                <div class="text">未发现此类文件</div>
+            </div>`;
+        return;
+    }
+
+    // 过滤小于1MB的文件
+    const filtered = files.filter(f => f.size > 1048576);
+    if (filtered.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="icon">✅</div>
+                <div class="text">没有大于1MB的此类文件</div>
+            </div>`;
+        return;
+    }
+
+    const catLabel = category === 'safe' ? '可安全清理' : '谨慎清理';
+    const catClass = category === 'safe' ? 'cat-safe' : 'cat-caution';
+
+    let html = '';
+    filtered.forEach((f, idx) => {
+        const icon = f.is_dir ? '📁' : '📄';
+        const shortPath = f.path.length > 70 ? '...' + f.path.slice(-67) : f.path;
+
+        html += `
+            <div class="file-list-item" data-path="${escapeHtml(f.path)}" onclick="toggleFileSelection(this, '${escapeHtml(f.path)}')">
+                <input type="checkbox" class="file-checkbox" onclick="event.stopPropagation();">
+                <span class="file-icon">${icon}</span>
+                <div class="file-info">
+                    <div class="file-name" title="${escapeHtml(f.path)}">${escapeHtml(f.name)}</div>
+                    <div class="file-path" title="${escapeHtml(f.path)}">${escapeHtml(shortPath)}</div>
+                </div>
+                <span class="file-category ${catClass}">${catLabel}</span>
+                <span class="file-size">${f.size_formatted}</span>
+            </div>`;
+    });
+
+    container.innerHTML = html;
+}
+
+// ============================================================
+// 清理操作
+// ============================================================
+async function quickClean() {
+    if (!scanData) return;
+    pendingCleanType = 'quick';
+
+    try {
+        const resp = await fetch('/api/clean/quick', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({confirmed: false})
+        });
+        const data = await resp.json();
+
+        if (data.status === 'preview') {
+            pendingCleanData = data;
+            showConfirmModal('⚡ 一键清理确认', data);
+        }
+    } catch (err) {
+        alert('操作失败: ' + err.message);
+    }
+}
+
+async function deepClean() {
+    if (!scanData) return;
+    pendingCleanType = 'deep';
+
+    try {
+        const resp = await fetch('/api/clean/deep', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({confirmed: false, include_caution: true})
+        });
+        const data = await resp.json();
+
+        if (data.status === 'preview') {
+            pendingCleanData = data;
+            showConfirmModal('🔥 深度清理确认', data);
+        }
+    } catch (err) {
+        alert('操作失败: ' + err.message);
+    }
+}
+
+function showConfirmModal(title, data) {
+    document.getElementById('modalTitle').textContent = title;
+    document.getElementById('confirmModal').style.display = 'flex';
+
+    let bodyHtml = '';
+
+    // 统计摘要
+    bodyHtml += `
+        <div style="margin-bottom:20px;">
+            <div style="display:flex;gap:20px;flex-wrap:wrap;">
+                <div style="flex:1;min-width:150px;background:var(--surface2);padding:14px;border-radius:8px;text-align:center;">
+                    <div style="font-size:24px;font-weight:700;color:var(--safe);">${data.total_count || 0}</div>
+                    <div style="font-size:12px;color:var(--text2);">待清理项</div>
+                </div>
+                <div style="flex:1;min-width:150px;background:var(--surface2);padding:14px;border-radius:8px;text-align:center;">
+                    <div style="font-size:24px;font-weight:700;color:var(--accent);">${data.total_size_formatted || '0 B'}</div>
+                    <div style="font-size:12px;color:var(--text2);">将释放空间</div>
+                </div>
+            </div>
+        </div>`;
+
+    // 警告信息
+    if (pendingCleanType === 'deep' && data.warnings) {
+        bodyHtml += '<div class="warning-banner">⚠️ 深度清理警告</div>';
+        data.warnings.forEach(w => {
+            bodyHtml += `
+                <div class="warning-item">
+                    <span class="warn-icon">⚠️</span>
+                    <span>${w}</span>
+                </div>`;
+        });
+        bodyHtml += '<br>';
+    }
+
+    // 大文件列表（需要特别关注）
+    if (data.large_items && data.large_items.length > 0) {
+        bodyHtml += `
+            <div style="font-weight:600;margin-bottom:10px;color:var(--danger);">
+                🔴 以下大文件将被删除（>10MB）:
+            </div>
+            <div style="max-height:300px;overflow-y:auto;">`;
+
+        data.large_items.forEach(f => {
+            bodyHtml += `
+                <div class="file-list-item" style="background:rgba(231,76,60,0.05);">
+                    <span class="file-icon">📄</span>
+                    <div class="file-info">
+                        <div class="file-name">${escapeHtml(f.name)}</div>
+                        <div class="file-path">${escapeHtml(f.path)}</div>
+                    </div>
+                    <span class="file-size" style="color:var(--danger);">${f.size_formatted}</span>
+                </div>`;
+        });
+
+        bodyHtml += '</div>';
+    }
+
+    // 谨慎文件单独显示
+    if (data.caution_items && data.caution_items.length > 0) {
+        bodyHtml += `
+            <br>
+            <div style="font-weight:600;margin-bottom:10px;color:var(--caution);">
+                🟡 以下文件可能影响应用使用体验:
+            </div>
+            <div style="max-height:200px;overflow-y:auto;">`;
+
+        data.caution_items.forEach(f => {
+            bodyHtml += `
+                <div class="file-list-item" style="background:rgba(243,156,18,0.05);">
+                    <span class="file-icon">📁</span>
+                    <div class="file-info">
+                        <div class="file-name">${escapeHtml(f.name)}</div>
+                        <div class="file-path">${escapeHtml(f.path)}</div>
+                    </div>
+                    <span class="file-size" style="color:var(--caution);">${f.size_formatted}</span>
+                </div>`;
+        });
+
+        bodyHtml += '</div>';
+    }
+
+    // 深度清理额外警告
+    if (pendingCleanType === 'deep') {
+        bodyHtml += `
+            <br>
+            <div class="warning-banner" style="margin-top:10px;">
+                ⚠️ <b>深度清理</b>会同时清除安全文件和谨慎文件。<br>
+                谨慎文件包括浏览器缓存、应用缓存、下载文件夹大文件等。<br>
+                <b>删除后不影响系统运行</b>，但可能影响部分应用的使用体验。
+            </div>`;
+    }
+
+    // 安全提示
+    bodyHtml += `
+        <br>
+        <div class="info-banner">
+            💡 文件将被移至<b>回收站</b>，如有需要可以恢复。
+        </div>`;
+
+    document.getElementById('modalBody').innerHTML = bodyHtml;
+    document.getElementById('modalConfirmBtn').onclick = confirmClean;
+    document.getElementById('modalConfirmBtn').textContent = '✅ 确认清理 (' + data.total_size_formatted + ')';
+}
+
+async function confirmClean() {
+    if (!pendingCleanType || !pendingCleanData) return;
+
+    document.getElementById('modalConfirmBtn').disabled = true;
+    document.getElementById('modalConfirmBtn').innerHTML = '<span class="spinner"></span> 清理中...';
+
+    const endpoint = pendingCleanType === 'quick' ? '/api/clean/quick' : '/api/clean/deep';
+    const isDeep = pendingCleanType === 'deep';
+
+    try {
+        const resp = await fetch(endpoint, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                confirmed: true,
+                include_caution: isDeep,
+            })
+        });
+        const data = await resp.json();
+
+        closeModal();
+
+        if (data.status === 'done') {
+            showResultModal(data);
+        }
+    } catch (err) {
+        alert('清理失败: ' + err.message);
+    }
+}
+
+function showResultModal(data) {
+    document.getElementById('resultModal').style.display = 'flex';
+
+    let html = `
+        <div style="text-align:center;margin-bottom:20px;">
+            <div style="font-size:48px;">✅</div>
+            <div style="font-size:28px;font-weight:700;color:var(--safe);margin:10px 0;">
+                释放了 ${data.total_freed_formatted}
+            </div>
+        </div>
+
+        <div style="display:flex;gap:16px;text-align:center;">
+            <div style="flex:1;background:var(--surface2);padding:12px;border-radius:8px;">
+                <div style="font-size:20px;font-weight:700;color:var(--safe);">${data.deleted}</div>
+                <div style="font-size:12px;color:var(--text2);">成功删除</div>
+            </div>
+            <div style="flex:1;background:var(--surface2);padding:12px;border-radius:8px;">
+                <div style="font-size:20px;font-weight:700;color:var(--danger);">${data.failed}</div>
+                <div style="font-size:12px;color:var(--text2);">删除失败</div>
+            </div>
+            <div style="flex:1;background:var(--surface2);padding:12px;border-radius:8px;">
+                <div style="font-size:20px;font-weight:700;color:var(--text2);">${data.skipped}</div>
+                <div style="font-size:12px;color:var(--text2);">已跳过</div>
+            </div>
+        </div>`;
+
+    // 显示删除的文件
+    if (data.details && data.details.deleted_files && data.details.deleted_files.length > 0) {
+        html += '<div style="margin-top:16px;font-weight:600;">已删除的文件:</div>';
+        html += '<div style="max-height:200px;overflow-y:auto;margin-top:8px;">';
+        data.details.deleted_files.forEach(f => {
+            html += `
+                <div style="display:flex;justify-content:space-between;padding:4px 8px;font-size:12px;border-bottom:1px solid var(--border);">
+                    <span>${escapeHtml(f.name)}</span>
+                    <span style="color:var(--safe);">${formatSize(f.size)}</span>
+                </div>`;
+        });
+        html += '</div>';
+    }
+
+    // 显示跳过的文件
+    if (data.details && data.details.skipped_files && data.details.skipped_files.length > 0) {
+        html += '<div style="margin-top:16px;font-weight:600;color:var(--caution);">⏭ 跳过的文件 (系统保护):</div>';
+        html += '<div style="max-height:150px;overflow-y:auto;margin-top:8px;">';
+        data.details.skipped_files.forEach(f => {
+            html += `
+                <div style="padding:4px 8px;font-size:12px;border-bottom:1px solid var(--border);color:var(--text2);">
+                    ${escapeHtml(f.name)} - ${f.reason || '未知原因'}
+                </div>`;
+        });
+        html += '</div>';
+    }
+
+    document.getElementById('resultBody').innerHTML = html;
+}
+
+function closeModal() {
+    document.getElementById('confirmModal').style.display = 'none';
+    pendingCleanType = null;
+    pendingCleanData = null;
+}
+
+function closeResultModal() {
+    document.getElementById('resultModal').style.display = 'none';
+}
+
+// ============================================================
+// 辅助函数
+// ============================================================
+function toggleFileSelection(el, path) {
+    const checkbox = el.querySelector('.file-checkbox');
+    checkbox.checked = !checkbox.checked;
+
+    if (checkbox.checked) {
+        el.classList.add('selected');
+        selectedFiles.add(path);
+    } else {
+        el.classList.remove('selected');
+        selectedFiles.delete(path);
+    }
+}
+
+function updateStatus(state, text) {
+    const indicator = document.getElementById('statusIndicator');
+    let dotClass = 'blue';
+    if (state === 'scanning') dotClass = 'yellow pulse';
+    else if (state === 'ready') dotClass = 'green';
+
+    indicator.innerHTML = `<span class="status-dot ${dotClass}"></span> ${text}`;
+}
+
+function formatSize(bytes) {
+    if (!bytes || bytes === 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let i = 0;
+    let size = bytes;
+    while (size >= 1024 && i < units.length - 1) {
+        size /= 1024;
+        i++;
+    }
+    if (i === 0) return Math.round(size) + ' ' + units[i];
+    return size.toFixed(2) + ' ' + units[i];
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// 关闭模态框 (点击背景)
+document.getElementById('confirmModal').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+});
+document.getElementById('resultModal').addEventListener('click', function(e) {
+    if (e.target === this) closeResultModal();
+});
+
+// 键盘快捷键
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeModal();
+        closeResultModal();
+    }
+    if (e.ctrlKey && e.key === 's') {
+        e.preventDefault();
+        startScan();
+    }
+});
+
+// 初始化
+console.log('🧹 C盘深度清理工具已就绪');
+console.log('   Ctrl+S - 开始扫描');
+console.log('   Esc - 关闭弹窗');
+</script>
+
+</body>
+</html>
